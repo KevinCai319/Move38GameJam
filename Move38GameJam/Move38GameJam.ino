@@ -8,12 +8,17 @@
 #define RESET 9
 #define RANDOMIZE 10
 #define RESET_ROUND 11
+//color range
+#define DESIRED_COLOR_START 50
+#define CHECK_TYPE 12
+#define IM_FOLLOWER 13
+#define IM_SPINNER 14
+#define IM_PLAYER 15
 
-
+#define DESIRED_COLOR_END DESIRED_COLOR_START+NUM_COLORS
+#define NUM_COLORS 6
 //List of colors that can appear in-game.
 const Color COLORS[] = {RED,GREEN,BLUE,YELLOW,MAGENTA,WHITE};
-// How many colors to use. Can be less than the COLORS[] array.
-const byte NUM_COLORS = 6;
 
 //Quick way to classify tiles.
 enum Tile{
@@ -38,6 +43,7 @@ bool listen_for_player = false;
 byte face_colors[6] = {0,0,0,0,0,0};
 bool spinning = false;
 byte spins_done = 0;
+bool timer_started = false;
 void setup() {
   //set seed for RNG.
   randomize();
@@ -87,12 +93,18 @@ void rotate_colors(){
 
 void spinner_spin(){
   last_time = millis();
+  timer_started = false;
   //Setup the spinner's colors.
   FOREACH_FACE(f){
     color_face(f,f);
   }
   spinning = true;
   spins_done = 0;
+}
+void reset_game(){
+  tile_type = UNASSIGNED;
+  setValueSentOnAllFaces(RESET);
+  game_running = false;
 }
 //This area meant for players.
 
@@ -109,7 +121,6 @@ void player_setup(){
       }
     }
 }
-
 //Set the player's 4 panels that represent team color.
 void set_player_team_color(){
   for(int i = 2;i < 6;i++){
@@ -165,41 +176,77 @@ void loop() {
     case SPINNER:
       //if there is a triple click, just reset everything so everything is OK.
       if(buttonMultiClicked()){
-         tile_type = UNASSIGNED;
-         setValueSentOnAllFaces(RESET);
-         game_running = false;
+         reset_game();
       }else{
         if(spinning){
+         
           if(millis()-last_time >= 250){
             rotate_colors();
             last_time = millis();
             spins_done++;
+            if(spins_done == 1){
+              current_color = random(NUM_COLORS-1);
+              setValueSentOnAllFaces(DESIRED_COLOR_START+current_color);
+            }
             if(spins_done == 6){
               spinning = false;
-              color_full(random(NUM_COLORS-1));
+              color_full(current_color);
               setValueSentOnAllFaces(RANDOMIZE);
+              listen_for_player=true;
             }
           }
+        }else{
+          if(!timer_started && listen_for_player){
+            timer_started = true;
+            last_time = millis();
+            spins_done = 0;
+          }else {
+            if(listen_for_player){
+              if(millis() - last_time >= 1000){       //change 1000 to a variable that will decrease as the rounds continue
+                last_time = millis();
+                color_face(FAIL_COLOR,spins_done);
+                spins_done++;
+                if(spins_done >= 6){
+                    timer_started = false;
+                    listen_for_player = false;
+                }
+              }
+            }else{
+              if(buttonDoubleClicked()){
+                reset_game();
+              }
+            }
+          }
+          
         }
       }
     break;
     case FOLLOWER:
-        FOREACH_FACE(f) {
-          if(didValueOnFaceChange(f)){
-            if(getLastValueReceivedOnFace(f) == RESET){
-              setValueSentOnAllFaces(RESET);
-              tile_type = UNASSIGNED;
-              game_running = false;
-              listen_for_player=false;
-            }else if(getLastValueReceivedOnFace(f) == RANDOMIZE){
-              create_random_colors();
-              setValueSentOnAllFaces(RANDOMIZE);
-              listen_for_player=true;
-            }else{
-              
+        if(listen_for_player && buttonSingleClicked()){
+          //setValueSentOnAllFaces(IM_FOLLOWER);
+        }else{
+          FOREACH_FACE(f) {
+            if(didValueOnFaceChange(f)){
+              if(getLastValueReceivedOnFace(f) == RESET){
+                setValueSentOnAllFaces(RESET);
+                tile_type = UNASSIGNED;
+                game_running = false;
+                listen_for_player=false;
+              }else if(getLastValueReceivedOnFace(f) == RANDOMIZE){
+                create_random_colors();
+                setValueSentOnAllFaces(RANDOMIZE);
+                listen_for_player=true;
+              }else if(getLastValueReceivedOnFace(f) >= DESIRED_COLOR_START && getLastValueReceivedOnFace(f)<DESIRED_COLOR_END){
+                current_color = getLastValueReceivedOnFace(f)-DESIRED_COLOR_START;
+                setValueSentOnAllFaces(getLastValueReceivedOnFace(f));
+                //color_full(current_color);
+              }else{
+                
+              }
             }
           }
         }
+        
     break;
     default:
     break;
