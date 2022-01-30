@@ -1,4 +1,6 @@
 #define GREEN makeColorRGB(0,255,0)
+#define CYAN makeColorRGB(20,205,205)
+#define PINK makeColorRGB(255,105,180)
 #define FAIL_COLOR 254
 #define SPINNER_SPIN_TIME 1500
 //Success color would just be team color to make things easier.
@@ -18,11 +20,13 @@
 #define PLAYER_LOSS 17
 #define PLAYER_OFF 18
 #define GAME_END 19
+#define PLAYER_UPDATE_BLINK_RATE 300
 
 #define DESIRED_COLOR_END DESIRED_COLOR_START+NUM_COLORS
 #define NUM_COLORS 6
 //List of colors that can appear in-game.
-const Color COLORS[] = {RED, GREEN, BLUE, YELLOW, MAGENTA, WHITE};
+const Color COLORS[] = {RED, GREEN, BLUE, YELLOW, MAGENTA, WHITE,ORANGE,CYAN};
+
 
 //Quick way to classify tiles.
 enum Tile {
@@ -46,8 +50,8 @@ byte lives = 6;
 bool player_finalized = false;
 bool listen_for_player = false;
 byte face_colors[6] = {0, 0, 0, 0, 0, 0};
-byte face_connected[6] = {0, 0 ,0 ,0, 0, 0};
-bool face_changed[6] = {0, 0 ,0 ,0, 0, 0};
+byte face_connected[6] = {0, 0 , 0 , 0, 0, 0};
+bool face_changed[6] = {0, 0 , 0 , 0, 0, 0};
 bool spinning = false;
 byte spins_done = 0;
 bool timer_started = false;
@@ -115,7 +119,9 @@ void reset_game() {
   timer_started = false;
 }
 
-//This area meant for players.
+//PLAYER CODE
+
+//PLAYER HELPER FUNCTIONS
 
 //Set the player's 4 panels that represent team color.
 void set_player_team_color() {
@@ -134,21 +140,55 @@ void player_setup() {
   } else {
     if (buttonDoubleClicked()) {
       player_finalized = true;
-    }else if (buttonSingleClicked()) {
+      lives = 6;
+    } else if (buttonSingleClicked()) {
       current_color++;
-      current_color %= NUM_COLORS;
+      if(current_color == 8){
+        current_color = 2;
+      }
       set_player_team_color();
     }
   }
 }
 
+//PLAYER MAIN FUNCTIONS
+void update_player() {
+  if (!player_finalized) {
+    player_setup();
+  } else {
+    FOREACH_FACE(f) {
+      if (didValueOnFaceChange(f) && getLastValueReceivedOnFace(f) == RESET && face_connected[f]) {
+        reset_game();
+      } else if (face_changed[f] && getLastValueReceivedOnFace(f) == PLAYER_WIN && face_connected[f]) {
+        color_full(1);
+        timer_started = true;
+        last_time = millis();
+      } else if (face_changed[f] && getLastValueReceivedOnFace(f) == PLAYER_LOSS && face_connected[f]) {
+        if (!timer_started) {
+          color_full(0);
+          timer_started = true;
+          last_time = millis();
+          if (lives > 0)lives--;
+        }
+      } else {
+
+      }
+    }
+    if (timer_started && millis() - last_time > PLAYER_UPDATE_BLINK_RATE) {
+      set_player_team_color();
+      timer_started = false;
+    }
+    setValueSentOnAllFaces(IM_PLAYER);
+  }
+}
+
 void loop() {
   // put your main code here, to run repeatedly:
-  FOREACH_FACE(f){
+  FOREACH_FACE(f) {
     byte tmp = face_connected[f];
-    if(isValueReceivedOnFaceExpired(f)){
+    if (isValueReceivedOnFaceExpired(f)) {
       face_connected[f] = 0;
-    }else{
+    } else {
       face_connected[f] = getLastValueReceivedOnFace(f);
     }
     face_changed[f] = face_connected[f] != tmp;
@@ -158,7 +198,7 @@ void loop() {
       if (isAlone()) {
         //set color to white.
         color_full(5);
-        
+
         if (buttonDoubleClicked()) {
           tile_type = PLAYER;
           player_finalized = false;
@@ -186,81 +226,50 @@ void loop() {
       }
       break;
     case PLAYER:
-      if (!player_finalized) {
-        lives = 6;
-        player_setup();
-      } else {
-        int fail_count = 0;
-        FOREACH_FACE(f) {
-
-          if (didValueOnFaceChange(f) && getLastValueReceivedOnFace(f) == RESET) {
-            reset_game();
-          } else if (face_changed[f] && getLastValueReceivedOnFace(f) == PLAYER_WIN && face_connected[f]) {
-            color_full(1);
-            timer_started = true;
-            last_time = millis();
-          } else if (face_changed[f] && getLastValueReceivedOnFace(f) == PLAYER_LOSS && face_connected[f]) {
-            if(fail_count <1 && !timer_started){
-              color_full(0);
-              fail_count++;
-              timer_started = true;
-              last_time = millis();
-              if (lives > 0)lives--;
-            }
-          }else{
-            
-          }
-          
-        }
-        if (timer_started && millis() - last_time > 300) {
-          set_player_team_color();
-          timer_started = false;
-        }
-        setValueSentOnAllFaces(IM_PLAYER);
-      }
+      update_player();
       break;
     case SPINNER:
-        if (spinning) {
-          if (millis() - last_time >= 250) {
-            rotate_colors();
-            last_time = millis();
-            spins_done++;
-            if (spins_done == 1) {
-              current_color = random(NUM_COLORS - 1);
-              setValueSentOnAllFaces(DESIRED_COLOR_START + current_color);
-            }
-            if (spins_done == 6) {
-              spinning = false;
-              color_full(current_color);
-              setValueSentOnAllFaces(RANDOMIZE);
-              listen_for_player = true;
-            }
+      if (spinning) {
+        if (millis() - last_time >= 250) {
+          rotate_colors();
+          last_time = millis();
+          spins_done++;
+          if (spins_done == 1) {
+            current_color = random(NUM_COLORS - 1);
+            setValueSentOnAllFaces(DESIRED_COLOR_START + current_color);
           }
-        } else {
-          if (!timer_started && listen_for_player) {
-            timer_started = true;
-            last_time = millis();
-            spins_done = 0;
-          } else {
-            if (listen_for_player) {
-              if (millis() - last_time >= 1000){
-                last_time = millis();
-                color_face(FAIL_COLOR, spins_done);
-                spins_done++;
-                if (spins_done >= 6) {
-                  timer_started = false;
-                  listen_for_player = false;
-                  setValueSentOnAllFaces(GAME_END);
-                }
-              }
-            } else {
-              if (buttonSingleClicked()) {
-                reset_game();
-              }
-            }
+          if (spins_done == 6) {
+            spinning = false;
+            color_full(current_color);
+            setValueSentOnAllFaces(RANDOMIZE);
+            listen_for_player = true;
           }
-
         }
+      } else {
+        if (!timer_started && listen_for_player) {
+          timer_started = true;
+          last_time = millis();
+          spins_done = 0;
+        } else {
+          if (listen_for_player) {
+            if (millis() - last_time >= 500) {
+              last_time = millis();
+              color_face(FAIL_COLOR, spins_done);
+              spins_done++;
+              if (spins_done >= 6) {
+                timer_started = false;
+                listen_for_player = false;
+                setValueSentOnAllFaces(GAME_END);
+              }
+            }
+          } else {
+            if (buttonSingleClicked()) {
+              reset_game();
+            }
+          }
+        }
+
+      }
       break;
     case FOLLOWER:
       FOREACH_FACE(f) {
@@ -271,7 +280,7 @@ void loop() {
             tile_type = UNASSIGNED;
             game_running = false;
             listen_for_player = false;
-            game_over = true;
+            game_over = false;
           } else if (getLastValueReceivedOnFace(f) == RANDOMIZE) {
             create_random_colors();
             follower_disabled = false;
@@ -286,9 +295,9 @@ void loop() {
           } else if (getLastValueReceivedOnFace(f) == GAME_END) {
             listen_for_player = false;
             game_over = true;
-            FOREACH_FACE(g){
-              if(getLastValueReceivedOnFace(g) != IM_PLAYER){
-                setValueSentOnFace(getLastValueReceivedOnFace(f),g);
+            FOREACH_FACE(g) {
+              if (getLastValueReceivedOnFace(g) != IM_PLAYER) {
+                setValueSentOnFace(getLastValueReceivedOnFace(f), g);
               }
             }
           } else if (getLastValueReceivedOnFace(f) == IM_PLAYER && game_over) {
@@ -307,12 +316,19 @@ void loop() {
               } else {
                 setValueSentOnFace(PLAYER_LOSS, f);
               }
-            }else{
-              if(game_over && face_changed[f]){
+            } else {
+              if (game_over && face_changed[f]) {
                 setValueSentOnFace(PLAYER_LOSS, f);
               }
             }
           }
+        }
+      }
+      if(game_over && follower_disabled){
+        if(millis() % 1000 > 500){
+          color_full(FAIL_COLOR);
+        }else{
+          color_full(current_color);
         }
       }
 
