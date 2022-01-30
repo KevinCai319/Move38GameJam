@@ -6,6 +6,8 @@ Game created for Blinks by Move38 for the Stony Brook University Move 38 Game Ja
 
 Instruction and Demonstration Video: https://www.youtube.com/watch?v=dz82d3yiPaM
 
+Detailed Instructions: https://docs.google.com/document/d/1Uf3ytWdoQiUArfF8UjSBORGr-mzG2oRkcpJcBUTCupM/edit?usp=sharing
+
 Created by Kevin Cai, Kazi Jamal, Anna Noonan, Jaswinder Singh
 
 Roles:
