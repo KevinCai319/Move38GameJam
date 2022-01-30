@@ -1,6 +1,5 @@
 #define GREEN makeColorRGB(0,255,0)
 #define CYAN makeColorRGB(20,205,205)
-#define PINK makeColorRGB(255,105,180)
 #define FAIL_COLOR 254
 #define SPINNER_SPIN_TIME 1500
 //Success color would just be team color to make things easier.
@@ -9,17 +8,14 @@
 #define SPINNER_SET_MSG 8
 #define RESET 9
 #define RANDOMIZE 10
-#define RESET_ROUND 11
+#define GAME_END 19
 //color range
 #define DESIRED_COLOR_START 50
-#define CHECK_TYPE 12
-#define IM_FOLLOWER 13
-#define IM_SPINNER 14
+
 #define IM_PLAYER 15
 #define PLAYER_WIN 16
 #define PLAYER_LOSS 17
-#define PLAYER_OFF 18
-#define GAME_END 19
+
 #define PLAYER_UPDATE_BLINK_RATE 300
 
 #define DESIRED_COLOR_END DESIRED_COLOR_START+NUM_COLORS
@@ -27,8 +23,6 @@
 //List of colors that can appear in-game.
 const Color COLORS[] = {RED, GREEN, BLUE, YELLOW, MAGENTA, WHITE, ORANGE, CYAN};
 
-
-//Quick way to classify tiles.
 enum Tile {
   SPINNER,
   FOLLOWER,
@@ -51,7 +45,6 @@ long last_time = 0;
 
 //Usage to manage states.
 byte current_color = 0;
-byte tiles_in_network = 0;
 
 //Used more like a counter variable (Used to count spinner spins, spinner countdown, player lives)
 byte lives = 6;
@@ -72,7 +65,7 @@ void setup() {
   randomize();
   create_random_colors();
 }
-//This area meant for followers and uninitialized tiles.
+//This area meant for all tiles to use.
 void create_random_colors() {
   FOREACH_FACE(f)color_face(random(NUM_COLORS - 1), f);
 }
@@ -91,6 +84,15 @@ void color_full(byte c) {
   FOREACH_FACE(f) {
     color_face(c, f);
   }
+}
+
+void reset_game() {
+  tile_type = UNASSIGNED;
+  state = SETUP;
+  setValueSentOnAllFaces(RESET);
+  player_finalized = false;
+  player_timer_started = false;
+  follower_disabled = false;
 }
 
 
@@ -114,15 +116,6 @@ void spinner_spin() {
   FOREACH_FACE(f)color_face(f, f);
   state = SPINNING;
   lives = 0;
-}
-
-void reset_game() {
-  tile_type = UNASSIGNED;
-  state = SETUP;
-  setValueSentOnAllFaces(RESET);
-  player_finalized = false;
-  player_timer_started = false;
-  follower_disabled = false;
 }
 
 //PLAYER CODE
@@ -152,7 +145,7 @@ void player_setup() {
   }
 }
 
-//PLAYER MAIN FUNCTIONS
+//PLAYER MAIN FUNCTION
 void update_player() {
   if (!player_finalized) {
     player_setup();
@@ -201,7 +194,7 @@ void loop() {
   switch (tile_type) {
     case UNASSIGNED:
       if (isAlone()) {
-        //set color to white.
+        //set color to blink white.
         color_full((millis()%700 > 350)?5:FAIL_COLOR);
         if (buttonDoubleClicked()) {
           tile_type = PLAYER;
@@ -242,8 +235,7 @@ void loop() {
             if (lives == 1) {
               current_color = random(NUM_COLORS - 1);
               setValueSentOnAllFaces(DESIRED_COLOR_START + current_color);
-            }
-            if (lives == 6) {
+            }else if (lives == 6) {
               color_full(current_color);
               setValueSentOnAllFaces(RANDOMIZE);
               last_time = millis();
@@ -306,21 +298,14 @@ void loop() {
               } else {
                 setValueSentOnFace(PLAYER_LOSS, f);
               }
-            } else {
-              if (state == END && face_changed[f]) {
-                setValueSentOnFace(PLAYER_LOSS, f);
-              }
+            } else if (state == END && face_changed[f]){
+              setValueSentOnFace(PLAYER_LOSS, f);
             }
           }
         }
       }
-
-      if (state == END && follower_disabled) {
-        if (millis() % 1000 > 500) {
-          color_full(FAIL_COLOR);
-        } else {
-          color_full(current_color);
-        }
+      if (state == END && follower_disabled){
+        color_full((millis() % 1000 > 500)?FAIL_COLOR:current_color);
       }
       break;
     default:
